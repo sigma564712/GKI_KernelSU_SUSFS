@@ -1,0 +1,74 @@
+name: 'Enable BTF'
+description: 'Enable CONFIG_DEBUG_INFO_BTF and apply libbpf feature-detection fix for android12-5.10'
+inputs:
+  version:
+    description: 'Kernel config version (e.g., android12-5.10)'
+    required: true
+  kernel_version:
+    description: 'Kernel version (e.g., 5.10)'
+    required: true
+  sublevel:
+    description: 'Kernel sublevel'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Apply libbpf feature-detection fix (android12-5.10)
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      if: ${{ inputs.version == 'android12-5.10' }}
+      run: |
+        set -euo pipefail
+        patch -p1 -N < ${{ github.action_path }}/patches/0001-libbpf-remove-feature-detection-BTF.patch
+
+    - name: Apply resolve_btfids linker-flag fix (android12-5.10)
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      if: ${{ inputs.version == 'android12-5.10' }}
+      run: |
+        set -euo pipefail
+        patch -p1 -N < ${{ github.action_path }}/patches/0002-resolve_btfids-inherit-host-linker-flags.patch
+
+    - name: Expose host dd for hermetic BTF generation (android12-5.10)
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      if: ${{ inputs.version == 'android12-5.10' }}
+      run: |
+        set -euo pipefail
+        # The hermetic toolchain PATH (build.config.common -> HERMETIC_TOOLCHAIN=1)
+        # has no /usr/bin, so coreutils 'dd' is missing. gen_btf in
+        # scripts/link-vmlinux.sh:253 does `printf ... | dd of=...`; without dd the
+        # pipeline fails and the build aborts with "Failed to generate BTF".
+        # ADDITIONAL_HOST_TOOLS is honored by build/_setup_env.sh (symlinked into
+        # the hermetic host_tools dir, which IS on the PATH). Echo it into the
+        # build config so both Normal and Bypass build.sh runs pick it up.
+        grep -q '^ADDITIONAL_HOST_TOOLS=' build.config.gki.aarch64 || \
+          echo 'ADDITIONAL_HOST_TOOLS="${ADDITIONAL_HOST_TOOLS} dd"' >> build.config.gki.aarch64
+
+    - name: Use apt pahole (>=1.23) for hermetic BTF generation (android12-5.10)
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel
+      if: ${{ inputs.version == 'android12-5.10' }}
+      run: |
+        set -euo pipefail
+        # android12-5.10 pins prebuilt pahole v1.19, which fails to recode the
+        # DWARF types and DROPS symbols (e.g. xdp_buff) from the emitted BTF.
+        # resolve_btfids then aborts with "FAILED unresolved symbol xdp_buff".
+        # a13-5.10 ships prebuilt pahole v1.23 which works. The runner installs
+        # apt pahole 1.25 (/usr/bin/pahole). Repoint the hermetic-path symlink
+        # (first dir on PATH) to it. This is the same dir that dd lives in.
+        HERMETIC_PAHOLE="build/build-tools/path/linux-x86/pahole"
+        if [ -L "$HERMETIC_PAHOLE" ]; then
+          ln -sf "$(command -v pahole)" "$HERMETIC_PAHOLE"
+          echo "Repointed $HERMETIC_PAHOLE -> $(readlink -f "$HERMETIC_PAHOLE")"
+          "$HERMETIC_PAHOLE" --version
+        else
+          echo "WARNING: $HERMETIC_PAHOLE not a symlink; leaving prebuilt pahole in place"
+        fi
+
+    - name: Enable BTF Config
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_DEBUG_INFO_BTF=y
