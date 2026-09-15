@@ -26,6 +26,7 @@ jobs:
       - name: Delete all General Cache releases
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           TAGS=$(gh release list --limit 1000 --json tagName,name --jq '.[] | select(.name == "General Cache") | .tagName')
