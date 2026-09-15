@@ -95,11 +95,6 @@ runs:
         fi
         root_version="$(git -C "$directory" describe --tags --always --dirty)"
 
-        if grep -q 'KernelSU requires either CONFIG_KPROBES=y or CONFIG_KSU_SUSFS=y' "$directory/kernel/Kbuild" 2>/dev/null; then
-        perl -0777 -pi -e 's/ifneq\s*\(\$\(strip \$\(CONFIG_KPROBES\)\),y\)\nifneq\s*\(\$\(strip \$\(CONFIG_KSU_SUSFS\)\),y\)\n\$\(error "KernelSU requires either CONFIG_KPROBES=y or CONFIG_KSU_SUSFS=y"\)\nendif\nendif\n//' "$directory/kernel/Kbuild"
-        echo "[!] Patched out premature CONFIG_KPROBES/CONFIG_KSU_SUSFS Kbuild check (fires before .config exists)."
-        fi
-
         relative_kernel="$(realpath --relative-to="$drivers_dir" "$PWD/$directory/kernel")"
         ln -s "$relative_kernel" "$drivers_dir/kernelsu"
         grep -q 'obj-$(CONFIG_KSU) += kernelsu/' "$drivers_dir/Makefile" ||
