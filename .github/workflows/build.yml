@@ -354,6 +354,13 @@ jobs:
     - name: Setup Misc Configs
       uses: ./.github/actions/misc
 
+    - name: Enable O3 Optimization
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y
+     
+
     - name: Enable BPF Stack (BTF + eBPF + FUSE-BPF)
       if: contains(inputs.feature_set, 'BPF')
       uses: ./.github/actions/btf
